@@ -1,0 +1,27 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "builds": [
+    { "src": "index.html", "use": "@vercel/static" }
+  ],
+  "rewrites": [
+    {
+      "source": "/health",
+      "destination": "https://hospital-readiness-api-shrinivas-2026.onrender.com/health"
+    },
+    {
+      "source": "/api/predict",
+      "destination": "https://hospital-readiness-api-shrinivas-2026.onrender.com/api/predict"
+    },
+    {
+      "source": "/api/metrics",
+      "destination": "https://hospital-readiness-api-shrinivas-2026.onrender.com/api/metrics"
+    }
+  ],
+  "redirects": [
+    {
+      "source": "/templates/index.html",
+      "destination": "/",
+      "permanent": true
+    }
+  ]
+}
