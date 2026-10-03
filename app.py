@@ -1,9 +1,8 @@
-
 import os
 import joblib
 import pandas as pd
 
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, jsonify, request, send_from_directory
 
 app = Flask(__name__)
 
@@ -95,7 +94,7 @@ def predict_readmission(patient_data):
 
 @app.route("/", methods=["GET"])
 def home():
-    return render_template("index.html")
+    return send_from_directory(BASE_DIR, "index.html")
 
 
 @app.route("/health", methods=["GET"])
@@ -161,29 +160,6 @@ def api_predict():
                 "features match the trained model."
             )
         }), 400
-
-
-@app.route("/predict", methods=["POST"])
-def predict_form():
-    try:
-        patient_data = request.form.to_dict()
-        result = predict_readmission(patient_data)
-
-        return render_template(
-            "index.html",
-            result=result,
-        )
-    except FileNotFoundError as exc:
-        return render_template(
-            "index.html",
-            error=str(exc),
-        ), 503
-    except Exception:
-        app.logger.exception("Form prediction failed")
-        return render_template(
-            "index.html",
-            error="Prediction failed. Please check the input.",
-        ), 400
 
 
 if __name__ == "__main__":
