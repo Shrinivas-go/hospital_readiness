@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hospital Readmission AI</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #f2f6fb;
+            margin: 0;
+            padding: 30px 15px;
+            color: #203047;
+        }
+        .container {
+            max-width: 760px;
+            margin: auto;
+            background: white;
+            padding: 28px;
+            border-radius: 14px;
+            box-shadow: 0 5px 24px #18344b14;
+        }
+        h1 { color: #126c79; }
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 16px;
+        }
+        label { display: block; font-weight: bold; margin-bottom: 6px; }
+        input, select, button {
+            box-sizing: border-box;
+            width: 100%;
+            padding: 11px;
+            border: 1px solid #ccd5e0;
+            border-radius: 7px;
+        }
+        button {
+            margin-top: 22px;
+            background: #126c79;
+            color: white;
+            border: none;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        .result {
+            background: #e8f5f4;
+            padding: 18px;
+            margin-top: 22px;
+            border-radius: 9px;
+        }
+        .error { color: #a21d2d; }
+        .notice { color: #526175; font-size: 13px; }
+        @media (max-width: 550px) {
+            .grid { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>Hospital Readmission Risk AI</h1>
+    <p>30-day readmission risk prediction prototype</p>
+
+    {% if error %}
+        <p class="error">{{ error }}</p>
+    {% endif %}
+
+    <form action="/predict" method="POST">
+        <div class="grid">
+            <div>
+                <label for="age">Age group</label>
+                <select id="age" name="age" required>
+                    <option value="[30-40)">30–40</option>
+                    <option value="[40-50)">40–50</option>
+                    <option value="[50-60)">50–60</option>
+                    <option value="[60-70)">60–70</option>
+                    <option value="[70-80)">70–80</option>
+                    <option value="[80-90)">80–90</option>
+                    <option value="[90-100)">90–100</option>
+                    <option value="[0-10)">0–10</option>
+                    <option value="[10-20)">10–20</option>
+                    <option value="[20-30)">20–30</option>
+                </select>
+            </div>
+
+            <div>
+                <label for="gender">Gender</label>
+                <select id="gender" name="gender" required>
+                    <option value="Female">Female</option>
+                    <option value="Male">Male</option>
+                </select>
+            </div>
+
+            <div>
+                <label for="time_in_hospital">Days in hospital</label>
+                <input id="time_in_hospital" name="time_in_hospital"
+                       type="number" min="1" max="14" value="4" required>
+            </div>
+
+            <div>
+                <label for="num_medications">Number of medications</label>
+                <input id="num_medications" name="num_medications"
+                       type="number" min="0" value="10" required>
+            </div>
+
+            <div>
+                <label for="number_inpatient">Previous inpatient visits</label>
+                <input id="number_inpatient" name="number_inpatient"
+                       type="number" min="0" value="0" required>
+            </div>
+
+            <div>
+                <label for="number_emergency">Previous emergency visits</label>
+                <input id="number_emergency" name="number_emergency"
+                       type="number" min="0" value="0" required>
+            </div>
+
+            <div>
+                <label for="number_outpatient">Previous outpatient visits</label>
+                <input id="number_outpatient" name="number_outpatient"
+                       type="number" min="0" value="0" required>
+            </div>
+
+            <div>
+                <label for="race">Race category</label>
+                <select id="race" name="race">
+                    <option value="Caucasian">Caucasian</option>
+                    <option value="AfricanAmerican">African American</option>
+                    <option value="Asian">Asian</option>
+                    <option value="Hispanic">Hispanic</option>
+                    <option value="Other">Other</option>
+                </select>
+            </div>
+        </div>
+
+        <button type="submit">Predict Readmission Risk</button>
+    </form>
+
+    {% if result %}
+    <div class="result">
+        <h2>Prediction Result</h2>
+        <p><strong>Estimated probability:</strong>
+           {{ result.readmission_probability }}%</p>
+        <p><strong>Risk category:</strong> {{ result.risk_level }}</p>
+        <p><strong>Model:</strong> {{ result.model }}</p>
+        <p class="notice">{{ result.disclaimer }}</p>
+    </div>
+    {% endif %}
+
+    <p class="notice">
+        Educational prototype using historical data. Predictions are not
+        medical advice and must not determine patient care.
+    </p>
+</div>
+</body>
+</html>
