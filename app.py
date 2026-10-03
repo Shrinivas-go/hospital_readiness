@@ -8,11 +8,41 @@ from flask import Flask, render_template, request, jsonify
 app = Flask(__name__)
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-MODEL_PATH = os.path.join(
-    BASE_DIR, "models", "readmission_model.joblib"
+MODEL_PATH = os.environ.get(
+    "READMISSION_MODEL_PATH",
+    os.path.join(BASE_DIR, "models", "readmission_model.joblib"),
 )
+if not os.path.isabs(MODEL_PATH):
+    MODEL_PATH = os.path.join(BASE_DIR, MODEL_PATH)
+DEFAULT_CORS_ORIGINS = {
+    "http://127.0.0.1:5000",
+    "http://localhost:5000",
+    "https://shrinivas-go.github.io",
+}
 
 bundle = None
+
+
+def get_allowed_origins():
+    configured = os.environ.get("CORS_ALLOWED_ORIGINS")
+    if configured:
+        return {
+            origin.strip()
+            for origin in configured.split(",")
+            if origin.strip()
+        }
+    return DEFAULT_CORS_ORIGINS
+
+
+@app.after_request
+def add_cors_headers(response):
+    origin = request.headers.get("Origin")
+    if origin in get_allowed_origins():
+        response.headers["Access-Control-Allow-Origin"] = origin
+        response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+        response.headers["Access-Control-Allow-Headers"] = "Content-Type"
+        response.headers["Vary"] = "Origin"
+    return response
 
 
 def load_model():
@@ -70,6 +100,16 @@ def home():
 
 @app.route("/health", methods=["GET"])
 def health():
+    if bundle is None:
+        try:
+            load_model()
+        except FileNotFoundError as exc:
+            return jsonify({
+                "status": "error",
+                "model_loaded": False,
+                "error": str(exc),
+            }), 503
+
     return jsonify({
         "status": "ok",
         "model_loaded": bundle is not None,
@@ -91,8 +131,11 @@ def metrics():
     })
 
 
-@app.route("/api/predict", methods=["POST"])
+@app.route("/api/predict", methods=["POST", "OPTIONS"])
 def api_predict():
+    if request.method == "OPTIONS":
+        return "", 204
+
     if not request.is_json:
         return jsonify({
             "error": "Send patient information as JSON."
@@ -150,4 +193,5 @@ if __name__ == "__main__":
     except FileNotFoundError as exc:
         print(exc)
 
-    app.run(host="127.0.0.1", port=5000, debug=False)
+    port = int(os.environ.get("PORT", "5000"))
+    app.run(host="0.0.0.0", port=port, debug=False)

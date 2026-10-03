@@ -1,58 +1,102 @@
-
-import os
 import json
+import os
+
 import joblib
 import pandas as pd
-
-from sklearn.model_selection import train_test_split
 from sklearn.compose import ColumnTransformer
-from sklearn.pipeline import Pipeline
 from sklearn.impute import SimpleImputer
-from sklearn.preprocessing import OneHotEncoder, StandardScaler
 from sklearn.linear_model import LogisticRegression
-from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import (
     accuracy_score,
+    average_precision_score,
+    f1_score,
     precision_score,
     recall_score,
-    f1_score,
     roc_auc_score,
-    average_precision_score,
 )
+from sklearn.model_selection import train_test_split
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_PATH = os.path.join(BASE_DIR, "diabetic_data.csv")
 MODEL_DIR = os.path.join(BASE_DIR, "models")
-MODEL_PATH = os.path.join(MODEL_DIR, "readmission_model.joblib")
+MODEL_PATH = os.environ.get(
+    "READMISSION_MODEL_PATH",
+    os.path.join(MODEL_DIR, "readmission_model.joblib"),
+)
+if not os.path.isabs(MODEL_PATH):
+    MODEL_PATH = os.path.join(BASE_DIR, MODEL_PATH)
 
-os.makedirs(MODEL_DIR, exist_ok=True)
+# Keep the model aligned with the fields the public web form actually collects.
+FEATURE_COLUMNS = [
+    "age",
+    "gender",
+    "race",
+    "time_in_hospital",
+    "num_medications",
+    "number_inpatient",
+    "number_emergency",
+    "number_outpatient",
+]
+CATEGORICAL_COLUMNS = ["age", "gender", "race"]
+NUMERICAL_COLUMNS = [
+    "time_in_hospital",
+    "num_medications",
+    "number_inpatient",
+    "number_emergency",
+    "number_outpatient",
+]
+
+
+def load_training_data():
+    if os.path.exists(DATA_PATH):
+        return pd.read_csv(
+            DATA_PATH,
+            usecols=FEATURE_COLUMNS + ["readmitted"],
+        )
+
+    # The CSV is deliberately not stored in Git. Fetch the public UCI source
+    # during a fresh deployment build, then train from only the needed fields.
+    try:
+        from ucimlrepo import fetch_ucirepo
+    except ImportError as exc:
+        raise RuntimeError(
+            "Install ucimlrepo or place diabetic_data.csv in the project root."
+        ) from exc
+
+    print("Downloading the UCI training data...")
+    dataset = fetch_ucirepo(id=296)
+    features = dataset.data.features
+    targets = dataset.data.targets
+
+    missing_columns = [
+        column for column in FEATURE_COLUMNS if column not in features.columns
+    ]
+    if missing_columns:
+        raise ValueError(
+            "The UCI dataset is missing required features: "
+            + ", ".join(missing_columns)
+        )
+    if "readmitted" in targets.columns:
+        readmitted = targets["readmitted"]
+    elif len(targets.columns) == 1:
+        readmitted = targets.iloc[:, 0]
+    else:
+        raise ValueError("The UCI dataset does not include a readmitted target.")
+
+    data = features.loc[:, FEATURE_COLUMNS].copy()
+    data["readmitted"] = readmitted.to_numpy()
+    return data
 
 
 def train_model():
-    if not os.path.exists(DATA_PATH):
-        raise FileNotFoundError(
-            "Place diabetic_data.csv in the project root."
-        )
+    os.makedirs(os.path.dirname(MODEL_PATH), exist_ok=True)
 
-    df = pd.read_csv(DATA_PATH)
-    df = df.replace("?", pd.NA)
-
-    # Positive class: readmission within 30 days.
+    df = load_training_data().replace("?", pd.NA)
     df["target"] = (df["readmitted"] == "<30").astype(int)
 
-    # Remove the original target and record identifiers.
-    df = df.drop(
-        columns=["readmitted", "encounter_id", "patient_nbr"],
-        errors="ignore",
-    )
-
-    # Exclude features with extremely high missingness.
-    # This rule is fixed before the train/test split.
-    missing_fraction = df.drop(columns=["target"]).isna().mean()
-    high_missing = missing_fraction[missing_fraction > 0.90].index.tolist()
-    df = df.drop(columns=high_missing)
-
-    X = df.drop(columns=["target"])
+    X = df[FEATURE_COLUMNS]
     y = df["target"]
 
     X_train, X_test, y_train, y_test = train_test_split(
@@ -63,116 +107,65 @@ def train_model():
         stratify=y,
     )
 
-    categorical_cols = X.select_dtypes(
-        include=["object", "category"]
-    ).columns.tolist()
-
-    numerical_cols = X.select_dtypes(
-        include=["number"]
-    ).columns.tolist()
-
     numeric_pipeline = Pipeline([
         ("imputer", SimpleImputer(strategy="median")),
         ("scaler", StandardScaler()),
     ])
-
     categorical_pipeline = Pipeline([
-        ("imputer", SimpleImputer(
-            strategy="constant",
-            fill_value="Unknown",
-        )),
+        ("imputer", SimpleImputer(strategy="constant", fill_value="Unknown")),
         ("encoder", OneHotEncoder(handle_unknown="ignore")),
     ])
-
     preprocessor = ColumnTransformer([
-        ("numeric", numeric_pipeline, numerical_cols),
-        ("categorical", categorical_pipeline, categorical_cols),
+        ("numeric", numeric_pipeline, NUMERICAL_COLUMNS),
+        ("categorical", categorical_pipeline, CATEGORICAL_COLUMNS),
     ])
-
-    models = {
-        "Logistic Regression": LogisticRegression(
+    model = Pipeline([
+        ("preprocessor", preprocessor),
+        ("classifier", LogisticRegression(
             max_iter=1000,
             class_weight="balanced",
             random_state=42,
-        ),
-        "Random Forest": RandomForestClassifier(
-            n_estimators=200,
-            class_weight="balanced",
-            random_state=42,
-            n_jobs=-1,
-        ),
+        )),
+    ])
+
+    model.fit(X_train, y_train)
+    probabilities = model.predict_proba(X_test)[:, 1]
+    predictions = (probabilities >= 0.5).astype(int)
+    metrics = {
+        "accuracy": float(accuracy_score(y_test, predictions)),
+        "precision": float(precision_score(
+            y_test, predictions, zero_division=0
+        )),
+        "recall": float(recall_score(y_test, predictions, zero_division=0)),
+        "f1": float(f1_score(y_test, predictions, zero_division=0)),
+        "roc_auc": float(roc_auc_score(y_test, probabilities)),
+        "pr_auc": float(average_precision_score(y_test, probabilities)),
     }
 
-    results = {}
-    fitted_models = {}
-
-    for name, classifier in models.items():
-        pipeline = Pipeline([
-            ("preprocessor", preprocessor),
-            ("classifier", classifier),
-        ])
-
-        pipeline.fit(X_train, y_train)
-
-        probabilities = pipeline.predict_proba(X_test)[:, 1]
-        predictions = (probabilities >= 0.5).astype(int)
-
-        metrics = {
-            "accuracy": float(accuracy_score(y_test, predictions)),
-            "precision": float(precision_score(
-                y_test, predictions, zero_division=0
-            )),
-            "recall": float(recall_score(
-                y_test, predictions, zero_division=0
-            )),
-            "f1": float(f1_score(
-                y_test, predictions, zero_division=0
-            )),
-            "roc_auc": float(roc_auc_score(y_test, probabilities)),
-            "pr_auc": float(average_precision_score(
-                y_test, probabilities
-            )),
-        }
-
-        results[name] = metrics
-        fitted_models[name] = pipeline
-
-        print(f"\n{name}")
-        for metric, value in metrics.items():
-            print(f"{metric}: {value:.4f}")
-
-    # Select by ROC-AUC on the held-out test set for this basic demo.
-    # For a rigorous final evaluation, select using validation data
-    # or cross-validation, then evaluate the chosen model on test data
-    # only once.
-    best_name = max(
-        results,
-        key=lambda name: results[name]["roc_auc"],
-    )
-
     bundle = {
-        "model": fitted_models[best_name],
-        "feature_columns": X.columns.tolist(),
-        "model_name": best_name,
-        "metrics": results[best_name],
-        "all_results": results,
-        "high_missing_columns": high_missing,
+        "model": model,
+        "feature_columns": FEATURE_COLUMNS,
+        "model_name": "Logistic Regression",
+        "metrics": metrics,
+        "all_results": {"Logistic Regression": metrics},
+        "high_missing_columns": [],
         "target_definition": (
             "1 = readmitted within 30 days; "
             "0 = readmitted after 30 days or not readmitted"
         ),
     }
-
-    joblib.dump(bundle, MODEL_PATH)
+    joblib.dump(bundle, MODEL_PATH, compress=3)
 
     with open(
         os.path.join(MODEL_DIR, "metrics.json"),
         "w",
         encoding="utf-8",
     ) as file:
-        json.dump(results, file, indent=2)
+        json.dump({"Logistic Regression": metrics}, file, indent=2)
 
-    print(f"\nSelected model: {best_name}")
+    print("Selected model: Logistic Regression")
+    for metric, value in metrics.items():
+        print(f"{metric}: {value:.4f}")
     print(f"Model saved to: {MODEL_PATH}")
 
 

@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="Educational hospital readmission risk prototype">
+    <title>Hospital Readmission Risk AI</title>
+    <style>
+        :root {
+            color-scheme: light;
+            font-family: Arial, sans-serif;
+            color: #203047;
+            background: #f2f6fb;
+        }
+        * { box-sizing: border-box; }
+        body {
+            min-height: 100vh;
+            margin: 0;
+            padding: 28px 16px;
+            background: #f2f6fb;
+        }
+        main {
+            width: min(100%, 800px);
+            margin: 0 auto;
+            padding: clamp(20px, 4vw, 32px);
+            border-radius: 16px;
+            background: #fff;
+            box-shadow: 0 8px 32px #18344b14;
+        }
+        h1 { margin: 0; color: #126c79; font-size: clamp(1.7rem, 4vw, 2.2rem); }
+        .subtitle { margin: 8px 0 20px; color: #526175; }
+        .status {
+            margin: 0 0 22px;
+            padding: 10px 12px;
+            border-radius: 8px;
+            background: #eef3f7;
+            color: #526175;
+            font-size: 0.92rem;
+        }
+        .status.ready { background: #e8f5f4; color: #126c79; }
+        .status.error { background: #fff0f1; color: #a21d2d; }
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 18px;
+        }
+        label { display: block; margin-bottom: 7px; font-weight: 700; }
+        input, select, button {
+            width: 100%;
+            min-height: 48px;
+            padding: 11px 12px;
+            border: 1px solid #ccd5e0;
+            border-radius: 8px;
+            font: inherit;
+        }
+        input:focus, select:focus, button:focus-visible {
+            outline: 3px solid #126c7940;
+            outline-offset: 2px;
+        }
+        button {
+            margin-top: 22px;
+            border: 0;
+            background: #126c79;
+            color: #fff;
+            font-weight: 700;
+            cursor: pointer;
+        }
+        button:hover { background: #0e5964; }
+        button:disabled { cursor: wait; opacity: 0.7; }
+        .message, .result {
+            margin-top: 20px;
+            padding: 16px;
+            border-radius: 9px;
+        }
+        .message { background: #fff0f1; color: #a21d2d; }
+        .result { background: #e8f5f4; }
+        .result h2 { margin: 0 0 10px; }
+        .result p { margin: 7px 0; }
+        .notice { margin: 22px 0 0; color: #526175; font-size: 0.85rem; line-height: 1.5; }
+        [hidden] { display: none !important; }
+        @media (max-width: 580px) {
+            body { padding: 14px 10px; }
+            main { padding: 20px 16px; }
+            .grid { grid-template-columns: 1fr; gap: 14px; }
+        }
+    </style>
+</head>
+<body>
+<main>
+    <h1>Hospital Readmission Risk AI</h1>
+    <p class="subtitle">30-day readmission risk prediction prototype</p>
+
+    <p id="service-status" class="status" role="status" aria-live="polite">
+        Connecting to the prediction service…
+    </p>
+
+    <form id="prediction-form">
+        <div class="grid">
+            <div>
+                <label for="age">Age group</label>
+                <select id="age" name="age" required>
+                    <option value="[30-40)">30–40</option>
+                    <option value="[40-50)">40–50</option>
+                    <option value="[50-60)">50–60</option>
+                    <option value="[60-70)">60–70</option>
+                    <option value="[70-80)">70–80</option>
+                    <option value="[80-90)">80–90</option>
+                    <option value="[90-100)">90–100</option>
+                    <option value="[0-10)">0–10</option>
+                    <option value="[10-20)">10–20</option>
+                    <option value="[20-30)">20–30</option>
+                </select>
+            </div>
+            <div>
+                <label for="gender">Gender</label>
+                <select id="gender" name="gender" required>
+                    <option value="Female">Female</option>
+                    <option value="Male">Male</option>
+                </select>
+            </div>
+            <div>
+                <label for="time_in_hospital">Days in hospital</label>
+                <input id="time_in_hospital" name="time_in_hospital" type="number" min="1" max="14" value="4" required>
+            </div>
+            <div>
+                <label for="num_medications">Number of medications</label>
+                <input id="num_medications" name="num_medications" type="number" min="0" value="10" required>
+            </div>
+            <div>
+                <label for="number_inpatient">Previous inpatient visits</label>
+                <input id="number_inpatient" name="number_inpatient" type="number" min="0" value="0" required>
+            </div>
+            <div>
+                <label for="number_emergency">Previous emergency visits</label>
+                <input id="number_emergency" name="number_emergency" type="number" min="0" value="0" required>
+            </div>
+            <div>
+                <label for="number_outpatient">Previous outpatient visits</label>
+                <input id="number_outpatient" name="number_outpatient" type="number" min="0" value="0" required>
+            </div>
+            <div>
+                <label for="race">Race category</label>
+                <select id="race" name="race">
+                    <option value="Caucasian">Caucasian</option>
+                    <option value="AfricanAmerican">African American</option>
+                    <option value="Asian">Asian</option>
+                    <option value="Hispanic">Hispanic</option>
+                    <option value="Other">Other</option>
+                </select>
+            </div>
+        </div>
+        <button id="predict-button" type="submit">Predict Readmission Risk</button>
+    </form>
+
+    <p id="error-message" class="message" role="alert" hidden></p>
+    <section id="prediction-result" class="result" aria-live="polite" hidden>
+        <h2>Prediction Result</h2>
+        <p><strong>Estimated probability:</strong> <span id="probability"></span></p>
+        <p><strong>Risk category:</strong> <span id="risk-level"></span></p>
+        <p><strong>Model:</strong> <span id="model-name"></span></p>
+        <p id="result-disclaimer" class="notice"></p>
+    </section>
+
+    <p class="notice">
+        Educational prototype using historical data. Predictions are not medical advice
+        and must not determine patient care.
+    </p>
+</main>
+
+<script>
+    const renderApi = "https://hospital-readiness-api-shrinivas-2026.onrender.com";
+    const isGitHubPages = window.location.hostname === "shrinivas-go.github.io";
+    const apiBaseUrl = (window.HOSPITAL_API_URL ||
+        (isGitHubPages ? renderApi : window.location.origin)).replace(/\/+$/, "");
+
+    const serviceStatus = document.getElementById("service-status");
+    const errorMessage = document.getElementById("error-message");
+    const resultPanel = document.getElementById("prediction-result");
+    const predictButton = document.getElementById("predict-button");
+
+    function setServiceStatus(message, state) {
+        serviceStatus.textContent = message;
+        serviceStatus.className = "status" + (state ? " " + state : "");
+    }
+
+    async function checkService() {
+        try {
+            const response = await fetch(apiBaseUrl + "/health");
+            const data = await response.json();
+            if (response.ok && data.status === "ok" && data.model_loaded) {
+                setServiceStatus("Prediction service is ready.", "ready");
+            } else {
+                setServiceStatus("Prediction service is starting. Try again in a moment.", "error");
+            }
+        } catch (error) {
+            setServiceStatus("Prediction service is waking up or is unavailable. Try again shortly.", "error");
+        }
+    }
+
+    document.getElementById("prediction-form").addEventListener("submit", async function (event) {
+        event.preventDefault();
+        errorMessage.hidden = true;
+        resultPanel.hidden = true;
+        predictButton.disabled = true;
+        predictButton.textContent = "Calculating…";
+
+        const form = new FormData(event.currentTarget);
+        const patient = Object.fromEntries(form.entries());
+        ["time_in_hospital", "num_medications", "number_inpatient", "number_emergency", "number_outpatient"]
+            .forEach(function (key) { patient[key] = Number(patient[key]); });
+
+        try {
+            const response = await fetch(apiBaseUrl + "/api/predict", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(patient)
+            });
+            const data = await response.json();
+            if (!response.ok) {
+                throw new Error(data.error || "The prediction could not be calculated.");
+            }
+
+            document.getElementById("probability").textContent = data.readmission_probability + "%";
+            document.getElementById("risk-level").textContent = data.risk_level;
+            document.getElementById("model-name").textContent = data.model;
+            document.getElementById("result-disclaimer").textContent = data.disclaimer;
+            resultPanel.hidden = false;
+        } catch (error) {
+            errorMessage.textContent = error.message || "The prediction service could not be reached.";
+            errorMessage.hidden = false;
+        } finally {
+            predictButton.disabled = false;
+            predictButton.textContent = "Predict Readmission Risk";
+        }
+    });
+
+    checkService();
+</script>
+</body>
+</html>

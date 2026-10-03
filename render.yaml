@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: hospital-readiness-api-shrinivas-2026
+    runtime: python
+    region: singapore
+    plan: free
+    buildCommand: pip install -r requirements.txt && python train.py
+    startCommand: gunicorn --bind 0.0.0.0:$PORT app:app
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.14
+      - key: CORS_ALLOWED_ORIGINS
+        value: https://shrinivas-go.github.io

@@ -1,43 +1,46 @@
 # Hospital Readmission Risk Prototype
 
-A small Flask app that estimates the chance of a hospital readmission within 30 days using the UCI Diabetes 130-US Hospitals dataset. This is an educational research prototype, not a clinical tool. Do not use its predictions to make patient-care decisions.
+A small educational demo for estimating 30-day hospital readmission risk. The GitHub Pages site serves the form, and a Flask API serves predictions. This is not a clinical tool; do not use predictions to make patient-care decisions.
 
-## Requirements
+## Public site
 
-- Python 3.10 or newer
-- The `diabetic_data.csv` file from the [UCI Diabetes 130-US Hospitals dataset](https://archive.ics.uci.edu/dataset/296/diabetes%2B130-us%2Bhospitals%2Bfor%2Byears%2B1999-2008)
+- Front end: <https://shrinivas-go.github.io/hospital_readiness/>
+- API: `https://hospital-readiness-api-shrinivas-2026.onrender.com`
 
-The dataset includes patient health records and sensitive demographic attributes. Keep the downloaded CSV on your machine; it is intentionally excluded from this repository. UCI lists the dataset under CC BY 4.0. Cite Clore, Cios, DeShazo, and Strack (2014), DOI: [10.24432/C5230J](https://doi.org/10.24432/C5230J).
+The front end calls the API over HTTPS. The Flask API allows requests only from this GitHub Pages origin and the local development origins.
 
-## Setup
+## Deploy the API
 
-Download the dataset from UCI, extract `diabetic_data.csv`, and place it in this project folder. Then create an environment and install the dependencies.
+The repository includes a Render Blueprint in `render.yaml`. In Render, create a Blueprint from this public repository and apply the configuration. It creates a free Python web service in Singapore, installs the requirements, trains a compact model, and starts Gunicorn. Its `/health` endpoint checks that the model has loaded.
+
+The model is intentionally limited to the fields shown in the form and is saved as a compressed artifact during the build. The training script uses a local `diabetic_data.csv` when present; otherwise it fetches the public dataset through UCI's repository client. The patient dataset and model artifact are not committed to GitHub.
+
+Render's free web services spin down after 15 minutes without traffic, so a first visit after inactivity can take about a minute to wake up. See [Render's free service limits](https://render.com/docs/free).
+
+## Run locally
+
+Python 3.12 is recommended.
 
 ### Windows PowerShell
 
 ```powershell
-py -3 -m venv .venv
+py -3.12 -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install -r requirements.txt
+python train.py
+python app.py
 ```
 
 ### macOS or Linux
 
 ```sh
-python3 -m venv .venv
+python3.12 -m venv .venv
 source .venv/bin/activate
 python -m pip install -r requirements.txt
-```
-
-## Train and run
-
-From the project folder, train the model and start the web app:
-
-```sh
 python train.py
 python app.py
 ```
 
-Open <http://127.0.0.1:5000/>. The model is saved under `models/` and is ignored by Git because it is a large generated artifact. Run `python train.py` again on another machine to create its local model.
+Open <http://127.0.0.1:5000/>. `train.py` uses the local CSV if available or downloads the UCI dataset as needed. UCI identifies this as patient data with sensitive demographic attributes; it remains outside this public repository. The dataset is licensed CC BY 4.0; cite Clore, Cios, DeShazo, and Strack (2014), DOI [10.24432/C5230J](https://doi.org/10.24432/C5230J).
 
-The app also exposes `GET /health`, `GET /api/metrics`, and `POST /api/predict`.
+The API exposes `GET /health`, `GET /api/metrics`, and `POST /api/predict`.
