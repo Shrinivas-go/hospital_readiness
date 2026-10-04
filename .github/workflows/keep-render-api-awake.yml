@@ -1,0 +1,19 @@
+name: Keep Render API awake
+
+on:
+  schedule:
+    - cron: "3,13,23,33,43,53 * * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  health-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Request the API health endpoint
+        run: >-
+          curl --fail --silent --show-error --retry 1 --retry-delay 5
+          --max-time 120
+          https://hospital-readiness-api-shrinivas-2026.onrender.com/health
